@@ -1,0 +1,39 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Streamer</title>
+</head>
+<body>
+    <h1>Streaming from Camera</h1>
+    <video id="video" autoplay muted></video>
+    <script src="/socket.io/socket.io.js"></script>
+    <script>
+        const video = document.getElementById('video');
+        const socket = io();
+
+        // Access user's camera and stream it
+        navigator.mediaDevices.getUserMedia({ video: true, audio: false })
+            .then((stream) => {
+                video.srcObject = stream;
+
+                const mediaRecorder = new MediaRecorder(stream);
+                mediaRecorder.start(100); // Send data every 100ms
+
+                mediaRecorder.ondataavailable = (event) => {
+                    if (event.data.size > 0) {
+                        socket.emit('stream', event.data);
+                    }
+                };
+
+                mediaRecorder.onerror = (error) => {
+                    console.error('MediaRecorder error:', error);
+                };
+            })
+            .catch((err) => {
+                console.error('Error accessing camera: ', err);
+            });
+    </script>
+</body>
+</html>

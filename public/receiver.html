@@ -1,0 +1,87 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Receiver</title>
+</head>
+<body>
+    <h1>Receiving Live Stream</h1>
+    <video id="receivedVideo" autoplay controls></video>
+    <script src="/socket.io/socket.io.js"></script>
+    <script>
+        const receivedVideo = document.getElementById('receivedVideo');
+        const socket = io();
+
+        let mediaSource = new MediaSource();
+        let sourceBuffer;
+        let mediaSourceOpen = false;
+        let queue = []; 
+        const videoMimeType = 'video/webm; codecs="vp8"';
+
+        function initializeMediaSource() {
+            mediaSource = new MediaSource();
+            receivedVideo.src = URL.createObjectURL(mediaSource);
+
+            mediaSource.addEventListener('sourceopen', () => {
+                mediaSourceOpen = true;
+                console.log("MediaSource opened.");
+
+                try {
+                    sourceBuffer = mediaSource.addSourceBuffer(videoMimeType);
+                    console.log("SourceBuffer added");
+
+                    sourceBuffer.addEventListener('updateend', () => {
+                        if (queue.length > 0 && !sourceBuffer.updating) {
+                            appendToSourceBuffer(queue.shift());
+                        }
+                    });
+
+                } catch (error) {
+                    console.error("Error adding SourceBuffer:", error);
+                }
+            });
+
+            mediaSource.addEventListener('sourceclose', () => {
+                mediaSourceOpen = false;
+                console.warn("MediaSource closed.");
+            });
+
+            mediaSource.addEventListener('error', (e) => {
+                console.error("MediaSource error: ", e);
+            });
+        }
+
+        function appendToSourceBuffer(buffer) {
+            if (!sourceBuffer || sourceBuffer.updating || !mediaSourceOpen) {
+                queue.push(buffer);  
+                return;
+            }
+
+            try {
+                sourceBuffer.appendBuffer(buffer);
+            } catch (error) {
+                console.error("Error appending to SourceBuffer:", error);
+            }
+        }
+
+        initializeMediaSource();
+
+        socket.on('stream', (data) => {
+            if (!mediaSourceOpen) {
+                console.warn("Received data, but MediaSource is not open.");
+                return;
+            }
+
+            const blob = new Blob([data], { type: 'video/webm' });
+            const reader = new FileReader();
+
+            reader.onload = () => {
+                const arrayBuffer = reader.result;
+                appendToSourceBuffer(new Uint8Array(arrayBuffer));
+            };
+
+            reader.readAsArrayBuffer(blob);
+        });
+    </script>
+</body>
+</html>
